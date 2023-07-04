@@ -1,0 +1,64 @@
+# Dataset / Model parameters
+data_dir: ./data/
+dataset: torch/cifar10
+pretrained: False
+num_classes: 10
+num_heads: 8
+img_size: 32
+mean:
+    - 0.4914
+    - 0.4822
+    - 0.4465
+std:
+    - 0.2470
+    - 0.2435
+    - 0.2616
+crop_pct: 1.0
+scale:
+    - 1.0
+    - 1.0
+ratio: [1.0, 1.0]  # cifar10dvs: 0.2-1.0
+interpolation: bicubic
+train_interpolation: bicubic
+use_conv_as_linear: true
+pooling_stat: "0011"
+time_steps: 4
+layer: 2
+dim: 512
+mlp_ratio: 4
+
+# Augmentation & regularization parameters
+aa: rand-m9-n1-mstd0.4-inc1
+color_jitter: 0.5
+mixup: 0.5
+mixup_off_epoch: 200
+mixup_prob: 1.0
+mixup_mode: batch
+mixup_switch_prob: 0.5
+cutmix: 0.0
+
+# Model Exponential Moving Average
+model-ema: False
+model-ema-decay: 0.9998
+
+# Misc
+seed: 42
+amp: False
+channels-last: False
+batch_size: 64
+val_batch_size: 64
+lr: 3e-4
+min_lr: 1e-5
+sched: cosine
+weight_decay: 6e-2
+epochs: 300
+cooldown_epochs: 10
+warmup_epochs: 20
+warmup_lr: 1e-6
+opt: adamw
+smoothing: 0.1
+workers: 8
+
+TET: True
+TET_means: 1.0
+TET_lamb: 0.001

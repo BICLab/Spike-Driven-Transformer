@@ -1,0 +1,11 @@
+output/
+data/
+__pycache__/
+*.out
+nni*
+*mae.py
+test_model.py
+pretrain.py
+*.tar
+*.npy
+*.zip

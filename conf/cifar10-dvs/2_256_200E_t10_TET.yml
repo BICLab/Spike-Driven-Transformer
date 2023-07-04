@@ -1,0 +1,50 @@
+# Dataset / Model parameters
+data_dir: ./data/cifar10-dvs
+dataset: cifar10-dvs
+pretrained: False
+num_classes: 10
+num_heads: 8
+img_size: 64
+crop_pct: 1.0
+scale:
+    - 1.0
+    - 1.0
+ratio: [0.2, 1.0]
+color_jitter: 0.
+interpolation: bicubic
+train_interpolation: bicubic
+use_conv_as_linear: True
+pooling_stat: "0011"
+in_channels: 2
+time_steps: 10
+layer: 2
+dim: 256
+mlp_ratio: 4
+hflip: 0.5
+
+# Model Exponential Moving Average
+model-ema: False
+model-ema-decay: 0.9998
+
+# Misc
+seed: 42
+amp: True
+channels-last: False
+batch_size: 32
+val_batch_size: 32
+lr: 7.5e-3
+min_lr: 3e-4
+sched: cosine
+weight_decay: 1e-4
+epochs: 200
+cooldown_epochs: 10
+warmup_epochs: 10
+warmup_lr: 1e-3
+opt: adamw
+smoothing: 0.1
+workers: 8
+
+# TET
+TET: True
+TET_means: 1.0
+TET_lamb: 0.001

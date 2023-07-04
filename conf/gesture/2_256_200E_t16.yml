@@ -1,0 +1,44 @@
+# Dataset / Model parameters
+data_dir: ./data/DVSGesturedataset/
+dataset: gesture
+pretrained: False
+num_classes: 11
+num_heads: 8
+img_size: 128
+crop_pct: 1.0
+scale:
+    - 1.0
+    - 1.0
+ratio: [1.0, 1.0]
+color_jitter: 0.
+interpolation: bicubic
+train_interpolation: bicubic
+use_conv_as_linear: true
+pooling_stat: "0111"
+in_channels: 2
+time_steps: 16
+layer: 2
+dim: 256
+mlp-ratio: 4
+
+# Model Exponential Moving Average
+model-ema: False
+model-ema-decay: 0.9998
+
+# Misc
+seed: 42
+amp: True
+channels-last: False
+batch_size: 16
+val_batch_size: 16
+lr: 3e-4
+min_lr: 1e-5
+sched: cosine
+weight_decay: 6e-2
+epochs: 200
+cooldown_epochs: 10
+warmup_epochs: 10
+warmup_lr: 1e-6
+opt: lamb
+smoothing: 0.1
+workers: 8
