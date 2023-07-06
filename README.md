@@ -1,4 +1,4 @@
-# Spike-Driven Transformer
+# Spike-Driven Transformer [Arxiv](https://arxiv.org/abs/2307.01694v1)
 
 Spiking Neural Networks (SNNs) provide an energy-efficient deep learning option due to their unique spike-based event-driven (i.e., spike-driven) paradigm. In this paper, we incorporate the spike-driven paradigm into Transformer by the proposed Spike-driven Transformer with four unique properties: i) **Event-driven**, no calculation is triggered when the input of Transformer is zero; ii) **Binary spike communication**, all matrix multiplications associated with the spike matrix can be transformed into sparse additions; iii) **Self-attention with linear complexity at both token and channel dimensions**; iv) The operations between spike-form Query, Key, and Value are mask and addition. Together, **there are only sparse addition operations** in the Spike-driven Transformer. To this end, we design a novel Spike-Driven Self-Attention (SDSA), which exploits only mask and addition operations without any multiplication, and thus having up to **87.2× lower** computation energy than vanilla self-attention. Especially in SDSA, the matrix multiplication between Query, Key, and Value is designed as the mask operation. In addition, we rearrange all residual connections in the vanilla Transformer before the activation functions to ensure that all neurons transmit binary spike signals. It is shown that the Spike-driven Transformer can achieve **77.1% top-1** accuracy on ImageNet-1K, which is the state-of-the-art result in the SNN field.
 
@@ -105,4 +105,15 @@ ImageNet with the following folder structure, you can extract imagenet by this [
 For help or issues using this git, please submit a GitHub issue.
 
 For other communications related to this git, please contact `manyao@stu.xjtu.edu.cn` and `jiakuihu29@gmail.com`.
+
+```shell
+@misc{yao2023spikedriven,
+      title={Spike-driven Transformer}, 
+      author={Man Yao and Jiakui Hu and Zhaokun Zhou and Li Yuan and Yonghong Tian and Bo Xu and Guoqi Li},
+      year={2023},
+      eprint={2307.01694},
+      archivePrefix={arXiv},
+      primaryClass={cs.NE}
+}
+```
 
