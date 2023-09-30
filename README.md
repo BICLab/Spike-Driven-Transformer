@@ -1,4 +1,4 @@
-# Spike-Driven Transformer (NIPS2023)
+# Spike-Driven Transformer ([NIPS2023](https://arxiv.org/abs/2307.01694v1))
 
 [Man Yao](https://scholar.google.com/citations?user=eE4vvp0AAAAJ), [Jiakui Hu](https://github.com/jkhu29), [Zhaokun Zhou](https://github.com/ZK-Zhou), [Li Yuan](https://yuanli2333.github.io/), [Yonghong Tian](https://scholar.google.com/citations?user=fn6hJx0AAAAJ), [Bo Xu](), [Guoqi Li](https://scholar.google.com/citations?user=qCfE--MAAAAJ&)
 
