@@ -1,4 +1,4 @@
-# Spike-Driven Transformer ([NIPS2023](https://arxiv.org/abs/2307.01694v1))
+# Spike-Driven Transformer ([NeurIPS2023](https://arxiv.org/abs/2307.01694v1))
 
 [Man Yao](https://scholar.google.com/citations?user=eE4vvp0AAAAJ), [Jiakui Hu](https://github.com/jkhu29), [Zhaokun Zhou](https://github.com/ZK-Zhou), [Li Yuan](https://yuanli2333.github.io/), [Yonghong Tian](https://scholar.google.com/citations?user=fn6hJx0AAAAJ), [Bo Xu](), [Guoqi Li](https://scholar.google.com/citations?user=qCfE--MAAAAJ&)
 
@@ -9,7 +9,7 @@ BICLab, Institute of Automation, Chinese Academy of Sciences
 :rocket:  :rocket:  :rocket: **News**:
 
 - **Jul. 04, 2023**: Release the code for training and testing.
-- **Sep. 22, 2023**: Accepted as poster in NIPS2023.
+- **Sep. 22, 2023**: Accepted as poster in NeurIPS2023.
 - **Sep. 30, 2023**: Release the configs and pre-trained parameters on IN1K.
 
 ## Abstract
