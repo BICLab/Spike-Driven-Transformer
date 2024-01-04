@@ -11,6 +11,7 @@ from datetime import datetime
 from spikingjelly.clock_driven import functional
 from spikingjelly.datasets.cifar10_dvs import CIFAR10DVS
 from spikingjelly.datasets.dvs128_gesture import DVS128Gesture
+from torch import quantization,quantize_per_tensor,floor
 
 import torch
 import torch.nn as nn
@@ -1120,6 +1121,26 @@ def main():
         _logger.addHandler(file_handler)
 
     try:
+        fuse_module(model)
+
+        state_dict = model.state_dict()
+        state_dict['block.0.attn.q_conv.weight'].data = floor(128 * state_dict['block.0.attn.q_conv.weight'].data)/128   #权重量化
+        state_dict['block.0.attn.q_conv.bias'].data = floor(128 * state_dict['block.0.attn.q_conv.bias'].data)/128   #权重量化
+        state_dict['block.0.attn.k_conv.weight'].data = floor(128 * state_dict['block.0.attn.k_conv.weight'].data)/128   #权重量化
+        state_dict['block.0.attn.k_conv.bias'].data = floor(128 * state_dict['block.0.attn.k_conv.bias'].data)/128   #权重量化
+        state_dict['block.0.attn.v_conv.weight'].data = floor(128 * state_dict['block.0.attn.v_conv.weight'].data)/128   #权重量化
+        state_dict['block.0.attn.v_conv.bias'].data = floor(128 * state_dict['block.0.attn.v_conv.bias'].data)/128   #权重量化
+        state_dict['block.0.attn.talking_heads.weight'].data = floor(128 * state_dict['block.0.attn.talking_heads.weight'].data)/128   #权重量化
+        state_dict['block.0.attn.proj_conv.weight'].data = floor(128 * state_dict['block.0.attn.proj_conv.weight'].data)/128   #权重量化
+        state_dict['block.0.attn.proj_conv.bias'].data = floor(128 * state_dict['block.0.attn.proj_conv.bias'].data)/128   #权重量化
+        state_dict['block.0.mlp.fc1_conv.weight'].data = floor(128 * state_dict['block.0.mlp.fc1_conv.weight'].data)/128   #权重量化
+        state_dict['block.0.mlp.fc1_conv.bias'].data = floor(128 * state_dict['block.0.mlp.fc1_conv.bias'].data)/128   #权重量化
+        state_dict['block.0.mlp.fc2_conv.weight'].data = floor(128 * state_dict['block.0.mlp.fc2_conv.weight'].data)/128   #权重量化
+        state_dict['block.0.mlp.fc2_conv.bias'].data = floor(128 * state_dict['block.0.mlp.fc2_conv.bias'].data)/128   #权重量化
+        state_dict['head.weight'].data = floor(128 * state_dict['head.weight'].data)/128   #权重量化
+        state_dict['head.bias'].data = floor(128 * state_dict['head.bias'].data)/128   #权重量化
+        model.load_state_dict(state_dict)
+
         if args.distributed and args.dist_bn in ("broadcast", "reduce"):
             if args.local_rank == 0:
                 _logger.info("Distributing BatchNorm running means and vars")
@@ -1132,14 +1153,14 @@ def main():
             output_dir=output_dir,
             amp_autocast=amp_autocast,
         )
-        if args.local_rank == 0:
-            non_zero_str = json.dumps(eval_metrics["non_zero"], indent=4)
-            firing_rate_str = json.dumps(eval_metrics["firing_rate"], indent=4)
-            _logger.info("top-1:", eval_metrics["top1"])
-            _logger.info("non_zero: ")
-            _logger.info(non_zero_str)
-            _logger.info("firing_rate: ")
-            _logger.info(firing_rate_str)
+        # if args.local_rank == 0:
+            # non_zero_str = json.dumps(eval_metrics["non_zero"], indent=4)
+            # firing_rate_str = json.dumps(eval_metrics["firing_rate"], indent=4)
+            # _logger.info("top-1:", eval_metrics["top1"])
+            # _logger.info("non_zero: ")
+            # _logger.info(non_zero_str)
+            # _logger.info("firing_rate: ")
+            # _logger.info(firing_rate_str)
         if model_ema is not None and not args.model_ema_force_cpu:
             if args.distributed and args.dist_bn in ("broadcast", "reduce"):
                 distribute_bn(model_ema, args.world_size, args.dist_bn == "reduce")
@@ -1269,6 +1290,58 @@ def validate(
     )
 
     return metrics
+
+
+class DummyModule(nn.Module):
+    def __init__(self):
+        super(DummyModule, self).__init__()
+
+    def forward(self, x):
+        return x
+
+
+def fuse(conv,bn):
+    w = conv.weight
+    mean = bn.running_mean
+    var_sqrt = torch.sqrt(bn.running_var + bn.eps)
+
+    beta = bn.weight
+    gamma = bn.bias
+
+    if conv.bias is not None:
+        b = conv.bias
+    else:
+        b = mean.new_zeros(mean.shape)
+
+    w = w * (beta / var_sqrt).reshape([conv.out_channels, 1, 1, 1])
+    b = (b - mean)/var_sqrt * beta + gamma
+    fused_conv = nn.Conv2d(conv.in_channels,
+                         conv.out_channels,
+                         conv.kernel_size,
+                         conv.stride,
+                         conv.padding,
+                         bias=True)
+    fused_conv.weight = nn.Parameter(w)
+    fused_conv.bias = nn.Parameter(b)
+    return fused_conv
+
+
+def fuse_module(m):
+    children = list(m.named_children())
+    c = None
+    cn = None
+
+    for name, child in children:
+        if isinstance(child, nn.BatchNorm2d):
+            bc = fuse(c, child)
+            m._modules[cn] = bc
+            m._modules[name] = DummyModule()
+            c = None
+        elif isinstance(child, nn.Conv2d):
+            c = child
+            cn = name
+        else:
+            fuse_module(child)
 
 
 if __name__ == "__main__":
