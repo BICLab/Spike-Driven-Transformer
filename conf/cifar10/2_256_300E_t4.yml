@@ -46,7 +46,7 @@ seed: 42
 amp: False
 channels-last: False
 batch_size: 64
-val_batch_size: 2
+val_batch_size: 64
 lr: 3e-4
 min_lr: 1e-5
 sched: cosine

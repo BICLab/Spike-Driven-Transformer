@@ -162,7 +162,8 @@ class MS_MLP_Conv(nn.Module):
             hook[self._get_name() + str(self.layer) + "_fc2_lif"] = x.detach()
         x = self.fc2_conv(x.flatten(0, 1))
         x = self.fc2_bn(x).reshape(T, B, C, H, W).contiguous()
-        # delete x = x + identity
+
+        x = x + identity  # TODO: 可能要删除
         return x, hook
 
 
@@ -210,6 +211,7 @@ class MS_SSA_Conv(nn.Module):
             )
 
         self.v_conv = nn.Conv2d(dim, dim, kernel_size=1, stride=1, bias=False)
+        # self.v_conv = nn.Identity()  # TODO: 需要改成单位矩阵
         # self.v_conv = nn.Identity()  # 将二维卷积更改为恒等映射
         self.v_bn = nn.BatchNorm2d(dim)
         if spike_mode == "lif":
@@ -255,41 +257,7 @@ class MS_SSA_Conv(nn.Module):
         self.mode = mode
         self.layer = layer
 
-
-    def _attn(self, q, k, v, x, hook=None):
-        T, B, C, H, W = x.shape
-        identity = x
-        # 代码中是先乘上kv，再乘q，需要改
-        kv = k.mul(v)
-        # qk = q.mul(k)  # 由于之前矩阵已经转置所以此处不需要transpose
-        if hook is not None:
-            hook[self._get_name() + str(self.layer) + "_kv_before"] = kv
-        if self.dvs:
-            kv = self.pool(kv)
-        kv = kv.sum(dim=-2, keepdim=True)
-        kv = self.talking_heads_lif(kv)
-        if hook is not None:
-            hook[self._get_name() + str(self.layer) + "_kv"] = kv.detach()
-        x = q.mul(kv)
-        if self.dvs:
-            x = self.pool(x)
-        if hook is not None:
-            hook[self._get_name() + str(self.layer) + "_x_after_qkv"] = x.detach()
-
-        x = x.transpose(3, 4).reshape(T, B, C, H, W).contiguous()
-        x = (
-            self.proj_bn(self.proj_conv(x.flatten(0, 1)))
-            .reshape(T, B, C, H, W)
-            .contiguous()
-        )
-
-        x = x + identity
-        return x, v, hook
-    
-
     def _myattn(self, q, k, v, x, hook=None):
-        T, B, C, H, W = x.shape
-        identity = x
         qk = q.mul(k)
         if hook is not None:
             hook[self._get_name() + str(self.layer) + "_qk_before"] = qk
@@ -304,15 +272,25 @@ class MS_SSA_Conv(nn.Module):
             x = self.pool(x)
         if hook is not None:
             hook[self._get_name() + str(self.layer) + "_x_after_qkv"] = x.detach()
-        x = x.transpose(3, 4).reshape(T, B, C, H, W).contiguous()
-        x = (
-            self.proj_bn(self.proj_conv(x.flatten(0, 1)))
-            .reshape(T, B, C, H, W)
-            .contiguous()
-        )
-        x = x + identity
-        return x, v, hook
+        return x
 
+    
+    def _attn(self,q, k, v, hook):
+        kv = k.mul(v)
+        if hook is not None:
+            hook[self._get_name() + str(self.layer) + "_kv_before"] = kv
+        if self.dvs:
+            kv = self.pool(kv)
+        kv = kv.sum(dim=-2, keepdim=True)
+        kv = self.talking_heads_lif(kv)
+        if hook is not None:
+            hook[self._get_name() + str(self.layer) + "_kv"] = kv.detach()
+        x = q.mul(kv)
+        if self.dvs:
+            x = self.pool(x)
+        if hook is not None:
+            hook[self._get_name() + str(self.layer) + "_x_after_qkv"] = x.detach()
+        return x
     
     def forward(self, x, hook=None):  # TODO: 在forward函数中更改注意力机制
         T, B, C, H, W = x.shape
@@ -366,7 +344,18 @@ class MS_SSA_Conv(nn.Module):
             .permute(0, 1, 3, 2, 4)
             .contiguous()
         )  # T B head N C//h
-        return self._attn(q, k, v, x)
+
+        x = self._attn(q, k, v, hook)
+        
+        x = x.transpose(3, 4).reshape(T, B, C, H, W).contiguous()
+        x = (
+            self.proj_bn(self.proj_conv(x.flatten(0, 1)))
+            .reshape(T, B, C, H, W)
+            .contiguous()
+        )
+
+        x = x + identity
+        return x, v, hook
 
 
 class MS_Block_Conv(nn.Module):
