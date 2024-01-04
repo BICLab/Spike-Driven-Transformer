@@ -23,7 +23,7 @@ train_interpolation: bicubic
 use_conv_as_linear: true
 pooling_stat: "0011"
 time_steps: 4
-layer: 2
+layer: 1
 dim: 256
 mlp_ratio: 4
 
@@ -46,7 +46,7 @@ seed: 42
 amp: False
 channels-last: False
 batch_size: 64
-val_batch_size: 64
+val_batch_size: 2
 lr: 3e-4
 min_lr: 1e-5
 sched: cosine

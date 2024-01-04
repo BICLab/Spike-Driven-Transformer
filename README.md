@@ -47,13 +47,13 @@ The hyper-parameters are in `./conf/`.
 Train:
 
 ```shell
-CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.launch --nproc_per_node=1 --master_port 29501 train.py -c /the/path/of/conf --model sdt --spike-mode lif
+CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.launch --nproc_per_node=1 --master_port 29501 train.py -c ./conf/cifar10/2_256_300E_t4.yml --model sdt --spike-mode lif
 ```
 
 Test:
 
 ```shell
-CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.launch --nproc_per_node=1 --master_port 29501 firing_num.py -c /the/path/of/conf --model sdt --spike-mode lif --resume /the/path/of/parameters --no-resume-opt
+CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.launch --nproc_per_node=1 --master_port 29501 firing_num.py -c Spike-Driven-Transformer/conf/cifar10/2_256_300E_t4.yml --model sdt --spike-mode lif --resume /the/path/of/parameters --no-resume-opt
 
 # for 288 x 288 resolution
 CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.launch --nproc_per_node=1 --master_port 29501 firing_num.py -c /the/path/of/conf --model sdt --spike-mode lif --resume /the/path/of/parameters --no-resume-opt --large-valid

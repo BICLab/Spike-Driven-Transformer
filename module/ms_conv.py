@@ -209,8 +209,8 @@ class MS_SSA_Conv(nn.Module):
                 init_tau=2.0, detach_reset=True, backend="cupy"
             )
 
-        # self.v_conv = nn.Conv2d(dim, dim, kernel_size=1, stride=1, bias=False)
-        self.v_conv = nn.Identity()  # 将二维卷积更改为恒等映射
+        self.v_conv = nn.Conv2d(dim, dim, kernel_size=1, stride=1, bias=False)
+        # self.v_conv = nn.Identity()  # 将二维卷积更改为恒等映射
         self.v_bn = nn.BatchNorm2d(dim)
         if spike_mode == "lif":
             self.v_lif = MultiStepLIFNode(tau=2.0, detach_reset=True, backend="cupy")
