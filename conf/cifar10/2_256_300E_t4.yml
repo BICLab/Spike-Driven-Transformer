@@ -23,7 +23,7 @@ train_interpolation: bicubic
 use_conv_as_linear: true
 pooling_stat: "0011"
 time_steps: 4
-layer: 2
+layer: 1
 dim: 256
 mlp_ratio: 4
 
