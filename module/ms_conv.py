@@ -1,5 +1,7 @@
 import torch.nn as nn
 from timm.models.layers import DropPath
+import torch
+import torch.nn.functional as F
 from spikingjelly.clock_driven.neuron import (
     MultiStepLIFNode,
     MultiStepParametricLIFNode,
@@ -15,6 +17,94 @@ class Erode(nn.Module):
 
     def forward(self, x):
         return self.pool(x)
+    
+
+
+class MyConv2D(nn.Module):
+    """
+    2D-convolutional layer that can be reparameterized into skip (see Eq. 6 of paper).
+
+    Args:
+        nf (int): The number of output channels.
+        nx (int): The number of input channels.
+        resid_gain (float): Residual weight.
+        skip_gain (float): Skip weight, if None then defaults to standard Conv2d layer.
+        trainable_gains (bool): Whether or not gains are trainable.
+        init_type (one of ["orth", "id", "normal"]): Type of weight initialization.
+        bias (bool): Whether or not to use bias parameters.
+    """
+
+    def __init__(
+        self,
+        nf,
+        nx,
+        resid_gain=None,
+        skip_gain=None,
+        trainable_gains=False,
+        init_type="normal",
+        bias=True,
+    ):
+        super().__init__()
+        self.nf = nf
+
+        if bias:
+            self.bias = nn.Parameter(torch.zeros(nf))
+        else:
+            self.bias = nn.Parameter(torch.zeros(nf), requires_grad=False)
+
+        if skip_gain is None:
+            # Standard convolutional layer
+            self.weight = nn.Parameter(torch.empty(nf, nx, 1, 1))
+            if init_type == "orth":
+                nn.init.orthogonal_(self.weight.view(nf, nx))
+            elif init_type == "id":
+                self.weight.data = torch.eye(nx).view(nf, nx, 1, 1)
+            elif init_type == "normal":
+                nn.init.normal_(self.weight, std=0.02)
+            else:
+                raise NotImplementedError
+            self.skip = False
+
+        elif skip_gain is not None:
+            # Reparameterized convolutional layer
+            assert nx == nf
+            self.resid_gain = nn.Parameter(
+                torch.Tensor([resid_gain]), requires_grad=trainable_gains
+            )
+            self.skip_gain = nn.Parameter(
+                torch.Tensor([skip_gain]),
+                requires_grad=trainable_gains,
+            )
+
+            self.weight = nn.Parameter(torch.zeros(nf, nx, 1, 1))
+            if init_type == "orth":
+                self.id = nn.init.orthogonal_(torch.empty(nx, nx)).cuda().view(nf, nx, 1, 1)
+            elif init_type == "id":
+                self.id = torch.eye(nx).cuda().view(nf, nx, 1, 1)
+            elif init_type == "normal":
+                self.id = nn.init.normal_(
+                    torch.empty(nx, nx), std=1 / nx
+                ).cuda().view(nf, nx, 1, 1)
+            else:
+                raise NotImplementedError
+            self.skip = True
+            self.init_type = init_type
+
+    def forward(self, x):
+        size_out = x.size()[:-2] + (self.nf, 1, 1)
+        if self.skip:
+            if self.resid_gain == 0 and self.init_type == "id":
+                x = torch.add(self.bias.view(1, -1, 1, 1), x * self.skip_gain.view(1, -1, 1, 1))
+            else:
+                x = F.conv2d(
+                    x, self.resid_gain * self.weight + self.skip_gain * self.id, self.bias, stride=(1, 1), padding=(0, 0)
+                )
+        else:
+            x = F.conv2d(x, self.weight, self.bias, stride=(1, 1), padding=(0, 0))
+        x = x.view(size_out)
+
+        return x
+
 
 
 class MS_MLP_Conv(nn.Module):
@@ -73,7 +163,7 @@ class MS_MLP_Conv(nn.Module):
         x = self.fc2_conv(x.flatten(0, 1))
         x = self.fc2_bn(x).reshape(T, B, C, H, W).contiguous()
 
-        x = x + identity
+        x = x + identity  # TODO: 可能要删除
         return x, hook
 
 
@@ -121,6 +211,7 @@ class MS_SSA_Conv(nn.Module):
             )
 
         self.v_conv = nn.Conv2d(dim, dim, kernel_size=1, stride=1, bias=False)
+        # self.v_conv = nn.Identity()  # TODO: 需要改成单位矩阵
         self.v_bn = nn.BatchNorm2d(dim)
         if spike_mode == "lif":
             self.v_lif = MultiStepLIFNode(tau=2.0, detach_reset=True, backend="cupy")
@@ -165,7 +256,42 @@ class MS_SSA_Conv(nn.Module):
         self.mode = mode
         self.layer = layer
 
-    def forward(self, x, hook=None):
+    def _myattn(self, q, k, v, x, hook=None):
+        qk = q.mul(k)
+        if hook is not None:
+            hook[self._get_name() + str(self.layer) + "_qk_before"] = qk
+        if self.dvs:
+            qk = self.pool(qk)
+        qk = qk.sum(dim=-2, keepdim=True)
+        # qk = self.talking_heads_lif(qk)  根据论文中的图片，不需要先拆分为多个注意力头
+        if hook is not None:
+            hook[self._get_name() + str(self.layer) + "_qk"] = qk.detach()
+        x = v.mul(qk)
+        if self.dvs:
+            x = self.pool(x)
+        if hook is not None:
+            hook[self._get_name() + str(self.layer) + "_x_after_qkv"] = x.detach()
+        return x
+
+    
+    def _attn(self,q, k, v, hook):
+        kv = k.mul(v)
+        if hook is not None:
+            hook[self._get_name() + str(self.layer) + "_kv_before"] = kv
+        if self.dvs:
+            kv = self.pool(kv)
+        kv = kv.sum(dim=-2, keepdim=True)
+        kv = self.talking_heads_lif(kv)
+        if hook is not None:
+            hook[self._get_name() + str(self.layer) + "_kv"] = kv.detach()
+        x = q.mul(kv)
+        if self.dvs:
+            x = self.pool(x)
+        if hook is not None:
+            hook[self._get_name() + str(self.layer) + "_x_after_qkv"] = x.detach()
+        return x
+    
+    def forward(self, x, hook=None):  # TODO: 在forward函数中更改注意力机制
         T, B, C, H, W = x.shape
         identity = x
         N = H * W
@@ -218,21 +344,8 @@ class MS_SSA_Conv(nn.Module):
             .contiguous()
         )  # T B head N C//h
 
-        kv = k.mul(v)
-        if hook is not None:
-            hook[self._get_name() + str(self.layer) + "_kv_before"] = kv
-        if self.dvs:
-            kv = self.pool(kv)
-        kv = kv.sum(dim=-2, keepdim=True)
-        kv = self.talking_heads_lif(kv)
-        if hook is not None:
-            hook[self._get_name() + str(self.layer) + "_kv"] = kv.detach()
-        x = q.mul(kv)
-        if self.dvs:
-            x = self.pool(x)
-        if hook is not None:
-            hook[self._get_name() + str(self.layer) + "_x_after_qkv"] = x.detach()
-
+        x = self._attn(q, k, v, hook)
+        
         x = x.transpose(3, 4).reshape(T, B, C, H, W).contiguous()
         x = (
             self.proj_bn(self.proj_conv(x.flatten(0, 1)))
