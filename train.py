@@ -47,7 +47,6 @@ from timm.scheduler import create_scheduler
 from timm.utils import ApexScaler, NativeScaler
 import model, dvs_utils, criterion
 
-
 try:
     from apex import amp
     from apex.parallel import DistributedDataParallel as ApexDDP
@@ -77,7 +76,7 @@ def resume_checkpoint(
 ):
     resume_epoch = None
     if os.path.isfile(checkpoint_path):
-        checkpoint = torch.load(checkpoint_path, map_location="cuda:0")
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
         if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
             if log_info:
                 _logger.info("Restoring model state from checkpoint...")
@@ -124,7 +123,7 @@ config_parser = parser = argparse.ArgumentParser(
 parser.add_argument(
     "-c",
     "--config",
-    default="cifar100_config.yml",
+    default="imagenet.yml",
     type=str,
     metavar="FILE",
     help="YAML config file specifying default arguments",
@@ -944,8 +943,6 @@ def main():
 
     torch.backends.cudnn.benchmark = True
     os.environ["PYTHONHASHSEED"] = str(args.seed)
-    os.environ['CUDA_VISIBLE_DEVICE']='0'       #做gpu运算
-    torch.cuda.set_device(0)                    #做gpu运算
     np.random.seed(args.seed)
     torch.initial_seed()  # dataloader multi processing
     torch.manual_seed(args.seed)
@@ -1102,7 +1099,7 @@ def main():
         model_ema = ModelEmaV2(
             model,
             decay=args.model_ema_decay,
-            device="cuda:0" if args.model_ema_force_cpu else None,
+            device="cpu" if args.model_ema_force_cpu else None,
         )
         if args.resume:
             load_checkpoint(model_ema.module, args.resume, use_ema=True)
@@ -1163,7 +1160,7 @@ def main():
             data_type="frame",
             frames_number=args.time_steps,
             split_by="number",
-            transform=dvs_utils.Resize(128),
+            transform=dvs_utils.Resize(64),
         )
         dataset_train, dataset_eval = dvs_utils.split_to_train_test_set(
             0.9, dataset, 10
@@ -1192,7 +1189,7 @@ def main():
             batch_size=args.batch_size,
             repeats=args.epoch_repeats,
             transform=transforms_train,
-            download=True,
+            # download=True,
         )
         dataset_eval = create_dataset(
             args.dataset,
@@ -1250,7 +1247,7 @@ def main():
         loader_train = torch.utils.data.DataLoader(
             dataset_train,
             batch_size=args.batch_size,
-            shuffle=True,           #first is true
+            shuffle=True,
             num_workers=args.workers,
             pin_memory=True,
         )
@@ -1342,7 +1339,7 @@ def main():
     if args.rank == 0:
         decreasing = False
         saver = CheckpointSaver(
-            model=model,                       #初始为model
+            model=model,
             optimizer=optimizer,
             args=args,
             model_ema=model_ema,
@@ -1356,68 +1353,34 @@ def main():
             f.write(args_text)
 
     try:
-        for epoch in range(1, 2):
+        for epoch in range(start_epoch, num_epochs):
+            if args.distributed and hasattr(loader_train.sampler, "set_epoch"):
+                loader_train.sampler.set_epoch(epoch)
 
-            model_best = torch.load('./output/train/20231113-094928-sdt-data-cifar10-t-4-spike-lif/model_best.pth.tar')
-            model.load_state_dict(model_best['state_dict'])
+            # eval_metrics = validate(model, loader_eval, validate_loss_fn, args, amp_autocast=amp_autocast)
 
-            fuse_module(model)
+            train_metrics = train_one_epoch(
+                epoch,
+                model,
+                loader_train,
+                optimizer,
+                train_loss_fn,
+                args,
+                lr_scheduler=lr_scheduler,
+                saver=saver,
+                output_dir=output_dir,
+                amp_autocast=amp_autocast,
+                loss_scaler=loss_scaler,
+                model_ema=model_ema,
+                mixup_fn=mixup_fn,
+                dvs_aug=train_dvs_aug,
+                dvs_trival_aug=train_dvs_trival_aug,
+            )
 
-            state_dict = model.state_dict
-
-            #模型剪枝
-            
-            for name, module in model.named_modules():
-                if isinstance(module, torch.nn.Conv2d):
-                    prune.l1_unstructured(module, name='weight', amount=0.15)
-                    prune.remove(module,'weight')  
-                elif isinstance(module, torch.nn.Linear):
-                    prune.l1_unstructured(module, name='weight', amount=0.2)
-                    prune.remove(module,'weight')  
-
-            print(
-                    "稀疏性 in head.weight: {:.2f}%".format(
-                      100. * float(torch.sum(model.head.weight == 0))
-                           / float(model.head.weight.nelement())
-                                     )
-                )   
-
-            state_dict = model.state_dict()
-            state_dict['block.0.attn.q_conv.weight'].data = floor(128 * state_dict['block.0.attn.q_conv.weight'].data)/128   #权重量化
-            state_dict['block.0.attn.q_conv.bias'].data = floor(128 * state_dict['block.0.attn.q_conv.bias'].data)/128   #权重量化
-            state_dict['block.0.attn.k_conv.weight'].data = floor(128 * state_dict['block.0.attn.k_conv.weight'].data)/128   #权重量化
-            state_dict['block.0.attn.k_conv.bias'].data = floor(128 * state_dict['block.0.attn.k_conv.bias'].data)/128   #权重量化
-            state_dict['block.0.attn.v_conv.weight'].data = floor(128 * state_dict['block.0.attn.v_conv.weight'].data)/128   #权重量化
-            state_dict['block.0.attn.v_conv.bias'].data = floor(128 * state_dict['block.0.attn.v_conv.bias'].data)/128   #权重量化
-            state_dict['block.0.attn.talking_heads.weight'].data = floor(128 * state_dict['block.0.attn.talking_heads.weight'].data)/128   #权重量化
-            state_dict['block.0.attn.proj_conv.weight'].data = floor(128 * state_dict['block.0.attn.proj_conv.weight'].data)/128   #权重量化
-            state_dict['block.0.attn.proj_conv.bias'].data = floor(128 * state_dict['block.0.attn.proj_conv.bias'].data)/128   #权重量化
-            state_dict['block.0.mlp.fc1_conv.weight'].data = floor(128 * state_dict['block.0.mlp.fc1_conv.weight'].data)/128   #权重量化
-            state_dict['block.0.mlp.fc1_conv.bias'].data = floor(128 * state_dict['block.0.mlp.fc1_conv.bias'].data)/128   #权重量化
-            state_dict['block.0.mlp.fc2_conv.weight'].data = floor(128 * state_dict['block.0.mlp.fc2_conv.weight'].data)/128   #权重量化
-            state_dict['block.0.mlp.fc2_conv.bias'].data = floor(128 * state_dict['block.0.mlp.fc2_conv.bias'].data)/128   #权重量化
-            state_dict['head.weight'].data = floor(1024 * state_dict['head.weight'].data)/1024   #权重量化
-            state_dict['head.bias'].data = floor(1024 * state_dict['head.bias'].data)/1024   #权重量化
-            model.load_state_dict(state_dict)
-
-            print(torch.max(state_dict['block.0.attn.q_conv.weight'].data))
-            print(torch.max(state_dict['block.0.attn.k_conv.weight'].data)) 
-            print(torch.max(state_dict['block.0.attn.v_conv.weight'].data))
-            print(torch.max(state_dict['block.0.attn.proj_conv.weight'].data))
-            print(torch.max(state_dict['block.0.mlp.fc1_conv.weight'].data))
-            print(torch.max(state_dict['block.0.mlp.fc2_conv.weight'].data))
-            print(torch.min(state_dict['block.0.attn.q_conv.weight'].data))
-            print(torch.min(state_dict['block.0.attn.k_conv.weight'].data)) 
-            print(torch.min(state_dict['block.0.attn.v_conv.weight'].data))
-            print(torch.min(state_dict['block.0.attn.proj_conv.weight'].data))
-            print(torch.min(state_dict['block.0.mlp.fc1_conv.weight'].data))
-            print(torch.min(state_dict['block.0.mlp.fc2_conv.weight'].data))
-            print(torch.max(state_dict['head.weight'].data))
-            print(torch.max(state_dict['head.bias'].data))
-            print(torch.min(state_dict['head.weight'].data))
-            print(torch.min(state_dict['head.bias'].data))
-            print(torch.max(state_dict['block.0.attn.q_conv.bias'].data))
-
+            if args.distributed and args.dist_bn in ("broadcast", "reduce"):
+                if args.local_rank == 0:
+                    _logger.info("Distributing BatchNorm running means and vars")
+                distribute_bn(model, args.world_size, args.dist_bn == "reduce")
 
             eval_metrics = validate(
                 model, loader_eval, validate_loss_fn, args, amp_autocast=amp_autocast
@@ -1436,8 +1399,29 @@ def main():
                 )
                 eval_metrics = ema_eval_metrics
 
-            print(eval_metrics['top1'])  
+            if lr_scheduler is not None:
+                # step LR for next epoch
+                lr_scheduler.step(epoch + 1, eval_metrics[eval_metric])
 
+            if output_dir is not None:
+                update_summary(
+                    epoch,
+                    train_metrics,
+                    eval_metrics,
+                    os.path.join(output_dir, "summary.csv"),
+                    write_header=best_metric is None,
+                    log_wandb=args.log_wandb and has_wandb,
+                )
+
+            if saver is not None:
+                # save proper checkpoint with eval metric
+                save_metric = eval_metrics[eval_metric]
+                best_metric, best_epoch = saver.save_checkpoint(
+                    epoch, metric=save_metric
+                )
+                _logger.info(
+                    "*** Best metric: {0} (epoch {1})".format(best_metric, best_epoch)
+                )
 
     except KeyboardInterrupt:
         pass
@@ -1691,55 +1675,6 @@ def validate(model, loader, loss_fn, args, amp_autocast=suppress, log_suffix="")
     )
 
     return metrics
-
-class DummyModule(nn.Module):
-    def __init__(self):
-        super(DummyModule, self).__init__()
-
-    def forward(self, x):
-        return x
-
-def fuse(conv,bn):
-    w = conv.weight
-    mean = bn.running_mean
-    var_sqrt = torch.sqrt(bn.running_var + bn.eps)
-
-    beta = bn.weight
-    gamma = bn.bias
-
-    if conv.bias is not None:
-        b = conv.bias
-    else:
-        b = mean.new_zeros(mean.shape)
-
-    w = w * (beta / var_sqrt).reshape([conv.out_channels, 1, 1, 1])
-    b = (b - mean)/var_sqrt * beta + gamma
-    fused_conv = nn.Conv2d(conv.in_channels,
-                         conv.out_channels,
-                         conv.kernel_size,
-                         conv.stride,
-                         conv.padding,
-                         bias=True)
-    fused_conv.weight = nn.Parameter(w)
-    fused_conv.bias = nn.Parameter(b)
-    return fused_conv
-
-def fuse_module(m):
-    children = list(m.named_children())
-    c = None
-    cn = None
-
-    for name, child in children:
-        if isinstance(child, nn.BatchNorm2d):
-            bc = fuse(c, child)
-            m._modules[cn] = bc
-            m._modules[name] = DummyModule()
-            c = None
-        elif isinstance(child, nn.Conv2d):
-            c = child
-            cn = name
-        else:
-            fuse_module(child)
 
 
 if __name__ == "__main__":
