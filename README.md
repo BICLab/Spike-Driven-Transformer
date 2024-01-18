@@ -120,13 +120,12 @@ ImageNet with the following folder structure, you can extract imagenet by this [
 ## Contact Information
 
 ```
-@misc{yao2023spikedriven,
-      title={Spike-driven Transformer}, 
-      author={Man Yao and Jiakui Hu and Zhaokun Zhou and Li Yuan and Yonghong Tian and Bo Xu and Guoqi Li},
-      year={2023},
-      eprint={2307.01694},
-      archivePrefix={arXiv},
-      primaryClass={cs.NE}
+@inproceedings{yao2023spikedriven,
+title={Spike-driven Transformer},
+author={Man Yao and JiaKui Hu and Zhaokun Zhou and Li Yuan and Yonghong Tian and Bo XU and Guoqi Li},
+booktitle={Thirty-seventh Conference on Neural Information Processing Systems},
+year={2023},
+url={https://openreview.net/forum?id=9FmolyOHi5}
 }
 ```
 
