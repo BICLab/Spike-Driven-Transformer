@@ -11,6 +11,7 @@ BICLab, Institute of Automation, Chinese Academy of Sciences
 - **Jul. 04, 2023**: Release the code for training and testing.
 - **Sep. 22, 2023**: Accepted as poster in NeurIPS2023.
 - **Sep. 30, 2023**: Release the configs and pre-trained parameters on IN1K.
+- **Feb. 15. 2024**: The [Spike-Driven Transformer V2](https://github.com/BICLab/Spike-Driven-Transformer-V2), which achieves 80.0% acc on IN1K, is now available.
 
 ## Abstract
 
