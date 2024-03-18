@@ -26,7 +26,10 @@ timm == 0.6.12
 1.10.0 <= pytorch < 2.0.0
 cupy
 spikingjelly == 0.0.0.0.12
+tensorboard
 ```
+
+> !!! Please install the spikingjelly and tensorboard correctly before raising issues about requirements. !!!
 
 ## Results on Imagenet-1K
 
